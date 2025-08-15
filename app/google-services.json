@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "744369369564",
+    "project_id": "notessync-453c1",
+    "storage_bucket": "notessync-453c1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:744369369564:android:98846e270962a80d441f19",
+        "android_client_info": {
+          "package_name": "com.vishnuhs.notessync"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2zztYsfT_EDcjXdWoims8wvaXl4fjBKE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
