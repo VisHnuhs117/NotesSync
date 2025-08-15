@@ -25,7 +25,8 @@ Whether you’re jotting down ideas, making a to-do list, or organizing your tho
 ---
 
 ## 📸 Screenshots
-![WhatsApp Image 2025-08-15 at 13 45 01_eb798cc6](https://github.com/user-attachments/assets/fa4898c7-375d-4f00-bc7e-b4a08d26c444)
+![![WhatsApp Image 2025-08-15 at 17 21 09_4f319d55](https://github.com/user-attachments/assets/e8d34210-c3dd-43f0-b01b-c0fe466227c6)
+)
 
 ---
 
