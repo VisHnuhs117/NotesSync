@@ -16,8 +16,8 @@ Whether you’re jotting down ideas, making a to-do list, or organizing your tho
 ---
 
 ## 🛠 Tech Stack
-- **Frontend:** Kotlin (Android) / Jetpack Compose *(or replace with what you used)*
-- **Backend:** Firebase Firestore (Cloud Sync) *(or replace with your backend)*
+- **Frontend:** Kotlin (Android) / Jetpack Compose
+- **Backend:** Firebase Firestore (Cloud Sync)
 - **Authentication:** Firebase Auth
 - **Storage:** Firebase Storage / SQLite
 - **Other Tools:** Material Design Components, ViewModel, LiveData
