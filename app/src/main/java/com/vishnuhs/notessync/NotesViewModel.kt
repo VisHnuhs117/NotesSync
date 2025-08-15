@@ -17,18 +17,27 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = NoteDatabase.getDatabase(application)
     private val noteDao = database.noteDao()
+    private val categoryDao = database.categoryDao()
     private val firebaseSync = FirebaseSyncRepository()
 
-    // Search query state
+    // Search and filter states
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // All notes from local database with search
-    val allNotes = searchQuery.flatMapLatest { query ->
-        if (query.isBlank()) {
-            noteDao.getAllNotes()
-        } else {
-            noteDao.searchNotes(query)
+    private val _selectedCategory = MutableStateFlow<String?>(null)
+    val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
+
+    // Categories flow
+    val categories = categoryDao.getAllCategories()
+
+    // All notes from local database with search and category filter
+    val allNotes = combine(searchQuery, selectedCategory) { query, category ->
+        Pair(query, category)
+    }.flatMapLatest { (query, category) ->
+        when {
+            query.isBlank() && category == null -> noteDao.getAllNotes()
+            query.isBlank() && category != null -> noteDao.getNotesByCategory(category)
+            else -> noteDao.searchNotes(query, category)
         }
     }
 
@@ -36,33 +45,61 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val _syncStatus = MutableStateFlow("Ready")
     val syncStatus: StateFlow<String> = _syncStatus.asStateFlow()
 
-    // Add this function to update search query
+    // Update search query
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }
 
-    // Rest of your existing functions remain the same...
-    fun addNote(title: String, content: String) {
+    // Update selected category filter
+    fun updateSelectedCategory(category: String?) {
+        _selectedCategory.value = category
+    }
+
+    // Add note with category
+    fun addNote(title: String, content: String, category: String = "General") {
         viewModelScope.launch {
             val note = Note(
                 title = title,
-                content = content
+                content = content,
+                category = category
             )
 
             // Save locally first
             noteDao.insertNote(note)
+
+            // Update category if it's new
+            categoryDao.insertCategory(
+                Category(
+                    name = category,
+                    color = getColorForCategory(category)
+                )
+            )
 
             // Then sync to Firebase
             syncNoteToFirebase(note)
         }
     }
 
+    // Get color for category (you can customize this)
+    private fun getColorForCategory(category: String): String {
+        return when (category) {
+            "Work" -> "#FF5722"
+            "Personal" -> "#2196F3"
+            "Ideas" -> "#FF9800"
+            "Important" -> "#F44336"
+            "To-Do" -> "#4CAF50"
+            "Shopping" -> "#9C27B0"
+            "Travel" -> "#00BCD4"
+            "Health" -> "#8BC34A"
+            "Finance" -> "#FFC107"
+            else -> "#6200EE"
+        }
+    }
+
+    // Rest of your existing functions remain the same...
     fun deleteNote(note: Note) {
         viewModelScope.launch {
-            // Delete locally
             noteDao.deleteNote(note)
-
-            // Delete from Firebase
             firebaseSync.deleteNote(note.id)
         }
     }

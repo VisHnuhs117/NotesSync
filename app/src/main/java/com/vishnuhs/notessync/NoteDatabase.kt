@@ -8,13 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
-    entities = [Note::class],
-    version = 2,  // Increment version
+    entities = [Note::class, Category::class], // Add Category entity
+    version = 3,  // Increment version again
     exportSchema = false
 )
 abstract class NoteDatabase : RoomDatabase() {
 
     abstract fun noteDao(): NoteDao
+    abstract fun categoryDao(): CategoryDao // Add CategoryDao
 
     companion object {
         @Volatile
@@ -35,6 +36,37 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 2 to 3 (add category)
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add category column to notes
+                database.execSQL(
+                    "ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT 'General'"
+                )
+
+                // Create categories table
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS categories (
+                        name TEXT PRIMARY KEY NOT NULL,
+                        color TEXT NOT NULL,
+                        noteCount INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """
+                )
+
+                // Insert default categories
+                val defaultCategories = listOf("General", "Work", "Personal", "Ideas", "Important")
+                defaultCategories.forEach { category ->
+                    database.execSQL(
+                        "INSERT OR REPLACE INTO categories (name, color, noteCount, createdAt) VALUES (?, ?, ?, ?)",
+                        arrayOf(category, "#6200EE", 0, System.currentTimeMillis())
+                    )
+                }
+            }
+        }
+
         fun getDatabase(context: Context): NoteDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -42,7 +74,7 @@ abstract class NoteDatabase : RoomDatabase() {
                     NoteDatabase::class.java,
                     "note_database"
                 )
-                    .addMigrations(MIGRATION_1_2)  // Add migration
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3) // Add both migrations
                     .build()
                 INSTANCE = instance
                 instance
