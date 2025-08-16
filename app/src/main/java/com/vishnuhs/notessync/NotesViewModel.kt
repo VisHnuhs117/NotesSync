@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import android.util.Log
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 
 
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
@@ -58,6 +59,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     // Add note with category
     fun addNote(title: String, content: String, category: String = "General") {
         viewModelScope.launch {
+            Log.d("NotesViewModel", "Creating note with category: $category")
             val note = Note(
                 title = title,
                 content = content,
@@ -66,8 +68,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
             // Save locally first
             noteDao.insertNote(note)
+            Log.d("NotesViewModel", "Saved locally: ${note.title} - Category: ${note.category}")
 
-            // Update category if it's new
+            // Update category in categories table
             categoryDao.insertCategory(
                 Category(
                     name = category,
@@ -75,11 +78,17 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
 
-            // Then sync to Firebase
-            syncNoteToFirebase(note)
+            // Immediately upload to Firebase
+            val result = firebaseSync.uploadNote(note)
+            if (result.isSuccess) {
+                Log.d("NotesViewModel", "Successfully uploaded to Firebase: ${note.title} - Category: ${note.category}")
+                // Mark as synced
+                noteDao.insertNote(note.copy(lastSyncedAt = System.currentTimeMillis()))
+            } else {
+                Log.e("NotesViewModel", "Failed to upload to Firebase", result.exceptionOrNull())
+            }
         }
     }
-
     // Get color for category (you can customize this)
     private fun getColorForCategory(category: String): String {
         return when (category) {
@@ -109,25 +118,61 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             _syncStatus.value = "Syncing..."
 
             try {
-                // Download notes from Firebase
-                val result = firebaseSync.downloadNotes()
+                // Get current local notes
+                val currentLocalNotes = noteDao.getAllNotes().first()
+                Log.d("NotesViewModel", "=== BEFORE SYNC ===")
+                currentLocalNotes.forEach { note ->
+                    Log.d("NotesViewModel", "Local note: ${note.title} - Category: ${note.category}")
+                }
 
-                if (result.isSuccess) {
-                    val firebaseNotes = result.getOrNull() ?: emptyList()
+                // First, upload all local notes that are newer
+                currentLocalNotes.forEach { localNote ->
+                    Log.d("NotesViewModel", "Uploading note: ${localNote.title} - Category: ${localNote.category}")
+                    val result = firebaseSync.uploadNote(localNote)
+                    if (result.isSuccess) {
+                        // Mark as synced locally
+                        noteDao.insertNote(localNote.copy(lastSyncedAt = System.currentTimeMillis()))
+                    } else {
+                        Log.e("NotesViewModel", "Failed to upload: ${localNote.title}")
+                    }
+                }
 
-                    // Simple merge: add Firebase notes to local database
+                // Then download from Firebase
+                val firebaseResult = firebaseSync.downloadNotes()
+
+                if (firebaseResult.isSuccess) {
+                    val firebaseNotes = firebaseResult.getOrNull() ?: emptyList()
+                    Log.d("NotesViewModel", "=== FIREBASE DATA ===")
+                    firebaseNotes.forEach { note ->
+                        Log.d("NotesViewModel", "Firebase note: ${note.title} - Category: ${note.category}")
+                    }
+
+                    // SMART MERGE: Only add notes that don't exist locally
+                    val localNoteIds = currentLocalNotes.map { it.id }.toSet()
+
                     firebaseNotes.forEach { firebaseNote ->
-                        try {
+                        if (firebaseNote.id !in localNoteIds) {
+                            // This is a new note from another device
+                            Log.d("NotesViewModel", "Adding new note from Firebase: ${firebaseNote.title} - Category: ${firebaseNote.category}")
                             noteDao.insertNote(firebaseNote.copy(lastSyncedAt = System.currentTimeMillis()))
-                        } catch (e: Exception) {
-                            Log.e("NotesViewModel", "Error inserting note from Firebase", e)
+                        } else {
+                            // Note exists locally - keep local version (since we just uploaded it)
+                            Log.d("NotesViewModel", "Keeping local version: ${firebaseNote.title}")
                         }
                     }
 
                     _syncStatus.value = "Synced successfully"
                 } else {
-                    _syncStatus.value = "Sync failed: ${result.exceptionOrNull()?.message}"
+                    _syncStatus.value = "Sync failed: ${firebaseResult.exceptionOrNull()?.message}"
                 }
+
+                // Debug after sync
+                val afterSyncNotes = noteDao.getAllNotes().first()
+                Log.d("NotesViewModel", "=== AFTER SYNC ===")
+                afterSyncNotes.forEach { note ->
+                    Log.d("NotesViewModel", "Final note: ${note.title} - Category: ${note.category}")
+                }
+
             } catch (e: Exception) {
                 _syncStatus.value = "Sync failed: ${e.message}"
                 Log.e("NotesViewModel", "Sync error", e)
@@ -167,6 +212,53 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateNote(noteId: String, title: String, content: String, category: String) {
+        viewModelScope.launch {
+            try {
+                // Find the existing note
+                val existingNotes = noteDao.getAllNotes().first()
+                val noteToUpdate = existingNotes.find { it.id == noteId }
+
+                if (noteToUpdate != null) {
+                    Log.d("NotesViewModel", "Updating note: $title - Category: $category")
+
+                    // Create updated note
+                    val updatedNote = noteToUpdate.copy(
+                        title = title,
+                        content = content,
+                        category = category,
+                        updatedAt = System.currentTimeMillis(),
+                        lastSyncedAt = 0L // Mark as needs sync
+                    )
+
+                    // Update locally
+                    noteDao.updateNote(updatedNote)
+                    Log.d("NotesViewModel", "Updated locally: ${updatedNote.title} - Category: ${updatedNote.category}")
+
+                    // Update category if it's new
+                    categoryDao.insertCategory(
+                        Category(
+                            name = category,
+                            color = getColorForCategory(category)
+                        )
+                    )
+
+                    // Sync to Firebase
+                    val result = firebaseSync.uploadNote(updatedNote)
+                    if (result.isSuccess) {
+                        Log.d("NotesViewModel", "Successfully synced update to Firebase")
+                        // Mark as synced
+                        noteDao.updateNote(updatedNote.copy(lastSyncedAt = System.currentTimeMillis()))
+                    } else {
+                        Log.e("NotesViewModel", "Failed to sync update to Firebase", result.exceptionOrNull())
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Error updating note", e)
+            }
+        }
+    }
+
     private fun syncNoteToFirebase(note: Note) {
         viewModelScope.launch {
             try {
@@ -180,3 +272,4 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+

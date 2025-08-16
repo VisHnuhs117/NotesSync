@@ -5,302 +5,264 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.collectAsState
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.*
-import androidx.compose.ui.graphics.Color
-import androidx.compose.runtime.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    NotesScreen()
-                }
+                NotesApp()
             }
+        }
+    }
+}
+
+@Composable
+fun NotesApp() {
+    var showAddNoteScreen by remember { mutableStateOf(false) }
+    var noteToEdit by remember { mutableStateOf<Note?>(null) }
+    val viewModel: NotesViewModel = viewModel()
+
+    when {
+        showAddNoteScreen -> {
+            AddNoteScreen(
+                onNavigateBack = { showAddNoteScreen = false },
+                onSaveNote = { title, content, category ->
+                    viewModel.addNote(title, content, category)
+                }
+            )
+        }
+
+        noteToEdit != null -> {
+            EditNoteScreen(
+                note = noteToEdit!!,
+                onNavigateBack = { noteToEdit = null },
+                onUpdateNote = { title, content, category ->
+                    viewModel.updateNote(noteToEdit!!.id, title, content, category)
+                }
+            )
+        }
+
+        else -> {
+            NotesListScreen(
+                viewModel = viewModel,
+                onAddNote = { showAddNoteScreen = true },
+                onEditNote = { note -> noteToEdit = note }
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesScreen() {
-    val viewModel: NotesViewModel = viewModel()
+fun NotesListScreen(
+    viewModel: NotesViewModel,
+    onAddNote: () -> Unit,
+    onEditNote: (Note) -> Unit
+) {
     val notes by viewModel.allNotes.collectAsState(initial = emptyList())
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val syncStatus by viewModel.syncStatus.collectAsState()
 
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-    var selectedNoteCategory by remember { mutableStateOf("General") }
-    var showCategoryDropdown by remember { mutableStateOf("") }
-
-    // Single LazyColumn for everything - this fixes the scroll issue
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Search Bar
-        item {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                label = { Text("Search notes...") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("NotesSync") }
             )
-        }
-
-        // Category Filter Section
-        item {
-            Column {
-                Text(
-                    text = "Categories",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Category chips in horizontal scroll
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // "All" chip
-                    item {
-                        FilterChip(
-                            onClick = { viewModel.updateSelectedCategory(null) },
-                            label = { Text("All") },
-                            selected = selectedCategory == null
-                        )
-                    }
-
-                    // Category chips
-                    items(Note.PREDEFINED_CATEGORIES) { category ->
-                        FilterChip(
-                            onClick = {
-                                viewModel.updateSelectedCategory(
-                                    if (selectedCategory == category) null else category
-                                )
-                            },
-                            label = { Text(category) },
-                            selected = selectedCategory == category
-                        )
-                    }
-                }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddNote,
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Note")
             }
         }
-
-        // Add Note Section
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Add New Note",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Category selection for new note
-                    ExposedDropdownMenuBox(
-                        expanded = showCategoryDropdown.isNotEmpty(),
-                        onExpandedChange = {
-                            showCategoryDropdown = if (showCategoryDropdown.isEmpty()) "open" else ""
-                        }
-                    ) {
-                        OutlinedTextField(
-                            readOnly = true,
-                            value = selectedNoteCategory,
-                            onValueChange = {},
-                            label = { Text("Category") },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = showCategoryDropdown.isNotEmpty()
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = showCategoryDropdown.isNotEmpty(),
-                            onDismissRequest = { showCategoryDropdown = "" }
-                        ) {
-                            Note.PREDEFINED_CATEGORIES.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text(category) },
-                                    onClick = {
-                                        selectedNoteCategory = category
-                                        showCategoryDropdown = ""
-                                    }
-                                )
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Search Bar
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    label = { Text("Search notes...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
                             }
                         }
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Title input
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Title") },
-                        modifier = Modifier.fillMaxWidth()
+            // Category Filter Section
+            item {
+                Column {
+                    Text(
+                        text = "Categories",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Content input
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("Content") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            if (title.isNotBlank() && content.isNotBlank()) {
-                                viewModel.addNote(title, content, selectedNoteCategory)
-                                title = ""
-                                content = ""
-                                selectedNoteCategory = "General"
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text("Save Note")
-                    }
-                }
-            }
-        }
-
-        // Sync controls
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = syncStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Row(
+                    LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // "All" chip
+                        item {
+                            FilterChip(
+                                onClick = { viewModel.updateSelectedCategory(null) },
+                                label = { Text("All") },
+                                selected = selectedCategory == null
+                            )
+                        }
+
+                        // Category chips
+                        items(Note.PREDEFINED_CATEGORIES) { category ->
+                            FilterChip(
+                                onClick = {
+                                    viewModel.updateSelectedCategory(
+                                        if (selectedCategory == category) null else category
+                                    )
+                                },
+                                label = { Text(category) },
+                                selected = selectedCategory == category
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Sync controls
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = syncStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Just the sync button - clean and professional
                         Button(
                             onClick = { viewModel.syncAllNotes() }
                         ) {
                             Text("Sync")
                         }
-
-                        Button(
-                            onClick = { viewModel.testFirebaseConnection() }
-                        ) {
-                            Text("Test")
-                        }
                     }
                 }
             }
-        }
 
-        // Notes header
-        item {
-            val headerText = when {
-                searchQuery.isNotBlank() && selectedCategory != null ->
-                    "\"$searchQuery\" in $selectedCategory (${notes.size})"
-                searchQuery.isNotBlank() ->
-                    "Search: \"$searchQuery\" (${notes.size})"
-                selectedCategory != null ->
-                    "$selectedCategory Notes (${notes.size})"
-                else ->
-                    "All Notes (${notes.size})"
+            // Notes header
+            item {
+                val headerText = when {
+                    searchQuery.isNotBlank() && selectedCategory != null ->
+                        "\"$searchQuery\" in $selectedCategory (${notes.size})"
+                    searchQuery.isNotBlank() ->
+                        "Search: \"$searchQuery\" (${notes.size})"
+                    selectedCategory != null ->
+                        "$selectedCategory Notes (${notes.size})"
+                    else ->
+                        "All Notes (${notes.size})"
+                }
+
+                Text(
+                    text = headerText,
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
             }
 
-            Text(
-                text = headerText,
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        }
+            // Display notes
+            if (notes.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Create,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No notes yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Tap the + button to create your first note",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(notes) { note ->
+                    NoteCard(
+                        note = note,
+                        searchQuery = searchQuery,
+                        onDelete = { viewModel.deleteNote(note) },
+                        onEdit = { onEditNote(note) }
 
-        // Display notes
-        items(notes) { note ->
-            NoteCard(
-                note = note,
-                searchQuery = searchQuery,
-                onDelete = { viewModel.deleteNote(note) }
-            )
-        }
+                    )
+                }
+            }
 
-        // Add some bottom padding
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
+            // Add some bottom padding for FAB
+            item {
+                Spacer(modifier = Modifier.height(80.dp))
+            }
         }
     }
 }
 
+// Keep your existing NoteCard and getCategoryColor functions unchanged
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NoteCard(note: Note, searchQuery: String, onDelete: () -> Unit) {
+fun NoteCard(note: Note, searchQuery: String, onDelete: () -> Unit, onEdit: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -319,7 +281,6 @@ fun NoteCard(note: Note, searchQuery: String, onDelete: () -> Unit) {
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    // Category badge
                     Spacer(modifier = Modifier.height(4.dp))
                     Surface(
                         color = getCategoryColor(note.category),
@@ -335,8 +296,15 @@ fun NoteCard(note: Note, searchQuery: String, onDelete: () -> Unit) {
                     }
                 }
 
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+
+
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    }
                 }
             }
 
@@ -361,7 +329,6 @@ fun NoteCard(note: Note, searchQuery: String, onDelete: () -> Unit) {
     }
 }
 
-// Helper function to get category colors
 @Composable
 fun getCategoryColor(category: String): Color {
     return when (category) {
