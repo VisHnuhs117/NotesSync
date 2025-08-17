@@ -6,26 +6,31 @@ import android.util.Log
 
 class FirebaseSyncRepository {
     private val firestore = FirebaseFirestore.getInstance()
-    private val notesCollection = firestore.collection("notes")
+    private val authRepository = AuthRepository()
 
-    // Upload a note to Firebase
+    // Get user-specific notes collection
+    private fun getUserNotesCollection() =
+        firestore.collection("users")
+            .document(authRepository.getCurrentUserId())
+            .collection("notes")
+
+    // Upload a note to Firebase (user-specific)
     suspend fun uploadNote(note: Note): Result<Unit> {
         return try {
-            Log.d("FirebaseSync", "Uploading note: ${note.id} - ${note.title}")
+            val currentUserId = authRepository.getCurrentUserId()
+            if (currentUserId.isEmpty()) {
+                return Result.failure(Exception("User not authenticated"))
+            }
 
-            val noteData = mapOf(
-                "id" to note.id,
-                "title" to note.title,
-                "content" to note.content,
-                "createdAt" to note.createdAt,
-                "updatedAt" to note.updatedAt,
-                "deviceId" to note.deviceId,
-                "isDeleted" to note.isDeleted
-            )
+            Log.d("FirebaseSync", "Uploading note: ${note.title} for user: $currentUserId")
 
-            Log.d("FirebaseSync", "Note data: $noteData")
+            val noteWithUserId = note.copy(userId = currentUserId)
+            val noteData = noteWithUserId.toFirebaseMap()
 
-            notesCollection.document(note.id)
+            Log.d("FirebaseSync", "Note data being uploaded: $noteData")
+
+            getUserNotesCollection()
+                .document(note.id)
                 .set(noteData)
                 .await()
 
@@ -37,11 +42,16 @@ class FirebaseSyncRepository {
         }
     }
 
-    // Download all notes from Firebase
+    // Download user's notes from Firebase
     suspend fun downloadNotes(): Result<List<Note>> {
         return try {
-            Log.d("FirebaseSync", "Downloading notes from Firebase")
-            val querySnapshot = notesCollection.get().await()
+            val currentUserId = authRepository.getCurrentUserId()
+            if (currentUserId.isEmpty()) {
+                return Result.failure(Exception("User not authenticated"))
+            }
+
+            Log.d("FirebaseSync", "Downloading notes for user: $currentUserId")
+            val querySnapshot = getUserNotesCollection().get().await()
             Log.d("FirebaseSync", "Found ${querySnapshot.documents.size} documents")
 
             val notes = querySnapshot.documents.mapNotNull { doc ->
@@ -49,15 +59,7 @@ class FirebaseSyncRepository {
                     val data = doc.data ?: return@mapNotNull null
                     Log.d("FirebaseSync", "Document: ${doc.id}, Data: $data")
 
-                    Note(
-                        id = data["id"] as String,
-                        title = data["title"] as String,
-                        content = data["content"] as String,
-                        createdAt = data["createdAt"] as Long,
-                        updatedAt = data["updatedAt"] as Long,
-                        deviceId = data["deviceId"] as String,
-                        isDeleted = data["isDeleted"] as Boolean
-                    )
+                    Note.fromFirebaseMap(data)
                 } catch (e: Exception) {
                     Log.e("FirebaseSync", "Error parsing document ${doc.id}", e)
                     null
@@ -71,10 +73,15 @@ class FirebaseSyncRepository {
         }
     }
 
-    // Delete a note from Firebase
+    // Delete a note from Firebase (user-specific)
     suspend fun deleteNote(noteId: String): Result<Unit> {
         return try {
-            notesCollection.document(noteId).delete().await()
+            val currentUserId = authRepository.getCurrentUserId()
+            if (currentUserId.isEmpty()) {
+                return Result.failure(Exception("User not authenticated"))
+            }
+
+            getUserNotesCollection().document(noteId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

@@ -20,6 +20,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val noteDao = database.noteDao()
     private val categoryDao = database.categoryDao()
     private val firebaseSync = FirebaseSyncRepository()
+    private val authRepository = AuthRepository()
+
+    private val _isAuthenticated = MutableStateFlow(false)
+    val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
 
     // Search and filter states
     private val _searchQuery = MutableStateFlow("")
@@ -56,14 +60,52 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCategory.value = category
     }
 
+    init {
+        // Ensure user is authenticated
+        ensureUserAuthenticated()
+    }
+
+    private fun ensureUserAuthenticated() {
+        viewModelScope.launch {
+            _syncStatus.value = "Checking authentication..."
+
+            if (!authRepository.isUserSignedIn()) {
+                Log.d("NotesViewModel", "User not signed in, attempting anonymous sign-in...")
+                val result = authRepository.signInAnonymously()
+
+                if (result.isSuccess) {
+                    val userId = authRepository.getCurrentUserId()
+                    Log.d("NotesViewModel", "User signed in successfully: $userId")
+                    _isAuthenticated.value = true
+                    _syncStatus.value = "Ready"
+                } else {
+                    Log.e("NotesViewModel", "Failed to sign in user", result.exceptionOrNull())
+                    _isAuthenticated.value = false
+                    _syncStatus.value = "Authentication failed: ${result.exceptionOrNull()?.message}"
+                }
+            } else {
+                val userId = authRepository.getCurrentUserId()
+                val isAnon = authRepository.isAnonymousUser()
+                Log.d("NotesViewModel", "User already signed in: $userId (anonymous: $isAnon)")
+
+                // Update authentication state properly
+                _isAuthenticated.value = true
+                _syncStatus.value = if (isAnon) "Ready" else "Signed in as ${authRepository.getUserDisplayName()}"
+            }
+        }
+    }
+
     // Add note with category
     fun addNote(title: String, content: String, category: String = "General") {
         viewModelScope.launch {
+            val currentUserId = authRepository.getCurrentUserId()
             Log.d("NotesViewModel", "Creating note with category: $category")
             val note = Note(
                 title = title,
                 content = content,
-                category = category
+                category = category,
+                userId = currentUserId
+
             )
 
             // Save locally first
@@ -89,6 +131,86 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun getUserDisplayName(): String = authRepository.getUserDisplayName()
+    fun getUserEmail(): String = authRepository.getUserEmail()
+    fun isAnonymousUser(): Boolean = authRepository.isAnonymousUser()
+
+    // Google Sign-In function
+    fun signInWithEmail(email: String, password: String) {
+        viewModelScope.launch {
+            _syncStatus.value = "Signing in..."
+
+            val result = if (isAnonymousUser()) {
+                // Link anonymous account to preserve existing notes
+                authRepository.linkAnonymousWithEmail(email, password)
+            } else {
+                // Direct email sign-in
+                authRepository.signInWithEmail(email, password)
+            }
+
+            if (result.isSuccess) {
+                val user = result.getOrNull()
+                Log.d("NotesViewModel", "Email sign-in successful: ${user?.email}")
+                _isAuthenticated.value = true
+                _syncStatus.value = "Signed in as ${user?.email}"
+
+                // Trigger a sync to merge any cloud notes
+                syncAllNotes()
+            } else {
+                Log.e("NotesViewModel", "Email sign-in failed", result.exceptionOrNull())
+                _syncStatus.value = "Sign-in failed: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun signUpWithEmail(email: String, password: String) {
+        viewModelScope.launch {
+            _syncStatus.value = "Creating account..."
+
+            val result = authRepository.signUpWithEmail(email, password)
+
+            if (result.isSuccess) {
+                val user = result.getOrNull()
+                Log.d("NotesViewModel", "Email sign-up successful: ${user?.email}")
+                _isAuthenticated.value = true
+                _syncStatus.value = "Account created for ${user?.email}"
+
+                // Sync any existing anonymous notes to new account
+                syncAllNotes()
+            } else {
+                Log.e("NotesViewModel", "Email sign-up failed", result.exceptionOrNull())
+                _syncStatus.value = "Sign-up failed: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    // Sign out function
+    fun signOut() {
+        viewModelScope.launch {
+            authRepository.signOut()
+            _isAuthenticated.value = false
+            _syncStatus.value = "Signed out - switching to anonymous mode"
+
+            // Sign in anonymously as fallback
+            ensureUserAuthenticated()
+        }
+    }
+
+    fun checkCurrentAuthStatus() {
+        viewModelScope.launch {
+            Log.d("NotesViewModel", "=== CURRENT AUTH STATUS ===")
+            Log.d("NotesViewModel", "Is user signed in: ${authRepository.isUserSignedIn()}")
+            Log.d("NotesViewModel", "Is anonymous: ${authRepository.isAnonymousUser()}")
+            Log.d("NotesViewModel", "User ID: ${authRepository.getCurrentUserId()}")
+            Log.d("NotesViewModel", "Display name: ${authRepository.getUserDisplayName()}")
+            Log.d("NotesViewModel", "Email: ${authRepository.getUserEmail()}")
+            Log.d("NotesViewModel", "_isAuthenticated.value: ${_isAuthenticated.value}")
+            Log.d("NotesViewModel", "Sync status: ${_syncStatus.value}")
+        }
+    }
+
+
     // Get color for category (you can customize this)
     private fun getColorForCategory(category: String): String {
         return when (category) {
@@ -220,6 +342,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 val noteToUpdate = existingNotes.find { it.id == noteId }
 
                 if (noteToUpdate != null) {
+                    val currentUserId = authRepository.getCurrentUserId()
                     Log.d("NotesViewModel", "Updating note: $title - Category: $category")
 
                     // Create updated note
@@ -227,6 +350,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                         title = title,
                         content = content,
                         category = category,
+                        userId = currentUserId,
                         updatedAt = System.currentTimeMillis(),
                         lastSyncedAt = 0L // Mark as needs sync
                     )

@@ -10,7 +10,8 @@ data class Note(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val content: String,
-    val category: String = "General", // Add category field
+    val category: String = "General",
+    val userId: String = "", // Add userId field
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     // Sync metadata
@@ -18,12 +19,13 @@ data class Note(
     val isDeleted: Boolean = false,
     val deviceId: String = android.os.Build.MODEL
 ) {
-    // Convert to Firebase format (removes Room annotations)
+    // Convert to Firebase format
     fun toFirebaseMap(): Map<String, Any> = mapOf(
         "id" to id,
         "title" to title,
         "content" to content,
-        "category" to category, // Add category to Firebase sync
+        "category" to category,
+        "userId" to userId, // Include userId in sync
         "createdAt" to createdAt,
         "updatedAt" to updatedAt,
         "deviceId" to deviceId,
@@ -36,25 +38,17 @@ data class Note(
             id = data["id"] as String,
             title = data["title"] as String,
             content = data["content"] as String,
-            category = data["category"] as? String ?: "General", // Handle existing notes without category
+            category = data["category"] as? String ?: "General",
+            userId = data["userId"] as? String ?: "", // Handle userId
             createdAt = data["createdAt"] as Long,
             updatedAt = data["updatedAt"] as Long,
             deviceId = data["deviceId"] as String,
             isDeleted = data["isDeleted"] as Boolean
         )
 
-        // Predefined categories
         val PREDEFINED_CATEGORIES = listOf(
-            "General",
-            "Work",
-            "Personal",
-            "Ideas",
-            "To-Do",
-            "Important",
-            "Shopping",
-            "Travel",
-            "Health",
-            "Finance"
+            "General", "Work", "Personal", "Ideas", "To-Do",
+            "Important", "Shopping", "Travel", "Health", "Finance"
         )
     }
 }

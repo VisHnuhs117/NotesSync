@@ -16,13 +16,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-
 class MainActivity : ComponentActivity() {
+    private lateinit var viewModel: NotesViewModel
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             MaterialTheme {
-                NotesApp()
+                NotesApp(
+
+                )
             }
         }
     }
@@ -32,6 +37,7 @@ class MainActivity : ComponentActivity() {
 fun NotesApp() {
     var showAddNoteScreen by remember { mutableStateOf(false) }
     var noteToEdit by remember { mutableStateOf<Note?>(null) }
+    var showEmailAuth by remember { mutableStateOf(false) }
     val viewModel: NotesViewModel = viewModel()
 
     when {
@@ -54,11 +60,26 @@ fun NotesApp() {
             )
         }
 
+        showEmailAuth -> {
+            val syncStatus by viewModel.syncStatus.collectAsState()
+            EmailAuthScreen(
+                onNavigateBack = { showEmailAuth = false },
+                onSignIn = { email, password ->
+                    viewModel.signInWithEmail(email, password)
+                },
+                onSignUp = { email, password ->
+                    viewModel.signUpWithEmail(email, password)
+                },
+                authStatus = syncStatus
+            )
+        }
+
         else -> {
             NotesListScreen(
                 viewModel = viewModel,
                 onAddNote = { showAddNoteScreen = true },
-                onEditNote = { note -> noteToEdit = note }
+                onEditNote = { note -> noteToEdit = note },
+                onShowEmailAuth = { showEmailAuth = true }
             )
         }
     }
@@ -69,7 +90,8 @@ fun NotesApp() {
 fun NotesListScreen(
     viewModel: NotesViewModel,
     onAddNote: () -> Unit,
-    onEditNote: (Note) -> Unit
+    onEditNote: (Note) -> Unit,
+    onShowEmailAuth: () -> Unit
 ) {
     val notes by viewModel.allNotes.collectAsState(initial = emptyList())
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -254,6 +276,68 @@ fun NotesListScreen(
             // Add some bottom padding for FAB
             item {
                 Spacer(modifier = Modifier.height(80.dp))
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                if (viewModel.isAnonymousUser()) {
+                                    Text(
+                                        text = "Anonymous User",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = "Create an account to sync across devices",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        text = viewModel.getUserDisplayName(),
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = viewModel.getUserEmail(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "✅ Syncing across all your devices",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            if (viewModel.isAnonymousUser()) {
+                                Button(
+                                    onClick = onShowEmailAuth
+                                ) {
+                                    Text("Sign In")
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { viewModel.signOut() }
+                                ) {
+                                    Text("Sign Out")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

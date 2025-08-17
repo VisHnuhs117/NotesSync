@@ -77,10 +77,15 @@ dependencies {
     implementation ("com.google.firebase:firebase-firestore-ktx:25.1.4")
     implementation ("com.google.firebase:firebase-auth-ktx:23.2.1")
 
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+
     // ViewModel with Compose
     implementation ("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+
+    implementation("androidx.compose.material:material-icons-extended:1.5.3")
 }
