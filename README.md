@@ -11,7 +11,7 @@ Whether you’re jotting down ideas, making a to-do list, or organizing your tho
 - 📂 **Organized Notes** – Categorize notes into folders or tags.
 - 🔍 **Search & Filter** – Quickly find notes by title or content.
 - 🌓 **Dark Mode** – Comfortable viewing in all lighting conditions.
-- 🔐 **Secure Storage** – Optional encryption for sensitive notes.
+- 🔐 **Secure Storage** – Encryption for sensitive notes.
 
 ---
 
