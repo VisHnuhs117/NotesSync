@@ -57,8 +57,19 @@ class AuthRepository {
             Log.d("AuthRepository", "Sign-in successful: ${result.user?.email}")
             Result.success(result.user)
         } catch (e: Exception) {
-            Log.e("AuthRepository", "Sign-in failed", e)
-            Result.failure(e)
+            Log.e("AuthRepository", "Sign-in failed: ${e.message}", e)
+
+            // Provide user-friendly error messages
+            val userFriendlyMessage = when {
+                e.message?.contains("password is invalid") == true -> "Incorrect password. Please try again."
+                e.message?.contains("no user record") == true -> "No account found with this email. Please sign up first."
+                e.message?.contains("email-already-in-use") == true -> "This email is already registered. Please sign in instead."
+                e.message?.contains("invalid-email") == true -> "Please enter a valid email address."
+                e.message?.contains("network") == true -> "Network error. Please check your connection."
+                else -> "Sign-in failed. Please check your email and password."
+            }
+
+            Result.failure(Exception(userFriendlyMessage))
         }
     }
 

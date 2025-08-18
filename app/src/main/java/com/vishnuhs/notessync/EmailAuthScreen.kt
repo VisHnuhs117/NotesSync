@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,41 +116,67 @@ fun EmailAuthScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Auth status
-            if (authStatus.isNotEmpty() && authStatus != "Ready") {
-                Text(
-                    text = authStatus,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (authStatus.contains("failed") || authStatus.contains("error"))
-                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // Sign in/up button
+            // Simplified Sign in/up button - always visible
             Button(
                 onClick = {
-                    val trimmedEmail = email.trim()
-                    val trimmedPassword = password.trim()
-
                     if (isSignUp) {
-                        if (trimmedPassword == confirmPassword.trim() && trimmedEmail.isNotEmpty() && trimmedPassword.length >= 6) {
-                            onSignUp(trimmedEmail, trimmedPassword)
+                        if (email.isNotEmpty() && password.isNotEmpty() && password == confirmPassword && password.length >= 6) {
+                            onSignUp(email.trim(), password.trim())
                         }
                     } else {
-                        if (trimmedEmail.isNotEmpty() && trimmedPassword.isNotEmpty()) {
-                            onSignIn(trimmedEmail, trimmedPassword)
+                        if (email.isNotEmpty() && password.isNotEmpty()) {
+                            onSignIn(email.trim(), password.trim())
                         }
                     }
                 },
-                enabled = email.isNotEmpty() && password.isNotEmpty() &&
-                        (!isSignUp || (password == confirmPassword && password.length >= 6)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (isSignUp) "Create Account" else "Sign In")
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+// Add enabled state info
+            if (isSignUp && password.isNotEmpty() && password.length < 6) {
+                Text(
+                    text = "Password must be at least 6 characters",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            // Auth status
+            if (authStatus.isNotEmpty() && authStatus != "Ready") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when {
+                            authStatus.contains("signed in") || authStatus.contains("successful") ->
+                                MaterialTheme.colorScheme.primaryContainer
+                            authStatus.contains("failed") || authStatus.contains("error") ->
+                                MaterialTheme.colorScheme.errorContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    )
+                ) {
+                    Text(
+                        text = when {
+                            authStatus.contains("signed in from another device") || authStatus.contains("other device") ->
+                                "✅ Successfully signed in! Your notes are syncing."
+                            else -> authStatus
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(16.dp),
+                        color = when {
+                            authStatus.contains("signed in") || authStatus.contains("successful") ->
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            authStatus.contains("failed") || authStatus.contains("error") ->
+                                MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Toggle sign in/up
             TextButton(
@@ -164,6 +191,14 @@ fun EmailAuthScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            LaunchedEffect(authStatus) {
+                if (authStatus.contains("Welcome back") || authStatus.contains("Signed in as")) {
+                    // Auto-navigate back after successful sign-in
+                    delay(1500)
+                    onNavigateBack()
+                }
+            }
 
             // Password requirements (for sign up)
             if (isSignUp) {

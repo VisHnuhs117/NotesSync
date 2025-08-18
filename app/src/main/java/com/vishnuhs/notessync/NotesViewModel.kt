@@ -12,6 +12,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 
 
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
@@ -136,30 +137,35 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     fun getUserEmail(): String = authRepository.getUserEmail()
     fun isAnonymousUser(): Boolean = authRepository.isAnonymousUser()
 
-    // Google Sign-In function
+    // Sign in with email
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _syncStatus.value = "Signing in..."
 
-            val result = if (isAnonymousUser()) {
-                // Link anonymous account to preserve existing notes
-                authRepository.linkAnonymousWithEmail(email, password)
-            } else {
-                // Direct email sign-in
-                authRepository.signInWithEmail(email, password)
-            }
+            try {
+                // Always try direct sign-in first (don't try to link with anonymous)
+                val result = authRepository.signInWithEmail(email, password)
 
-            if (result.isSuccess) {
-                val user = result.getOrNull()
-                Log.d("NotesViewModel", "Email sign-in successful: ${user?.email}")
-                _isAuthenticated.value = true
-                _syncStatus.value = "Signed in as ${user?.email}"
+                if (result.isSuccess) {
+                    val user = result.getOrNull()
+                    Log.d("NotesViewModel", "Email sign-in successful: ${user?.email}")
+                    _isAuthenticated.value = true
+                    _syncStatus.value = "Welcome back! Your notes are syncing."
 
-                // Trigger a sync to merge any cloud notes
-                syncAllNotes()
-            } else {
-                Log.e("NotesViewModel", "Email sign-in failed", result.exceptionOrNull())
-                _syncStatus.value = "Sign-in failed: ${result.exceptionOrNull()?.message}"
+                    // Small delay to show success message
+                    delay(2000)
+                    _syncStatus.value = "Signed in as ${user?.email}"
+
+                    // Trigger a sync to get cloud notes
+                    syncAllNotes()
+                } else {
+                    val errorMessage = result.exceptionOrNull()?.message ?: "Unknown error"
+                    Log.e("NotesViewModel", "Email sign-in failed: $errorMessage")
+                    _syncStatus.value = "Sign-in failed: $errorMessage"
+                }
+            } catch (e: Exception) {
+                Log.e("NotesViewModel", "Sign-in error", e)
+                _syncStatus.value = "Sign-in failed: ${e.message}"
             }
         }
     }
@@ -190,7 +196,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             authRepository.signOut()
             _isAuthenticated.value = false
-            _syncStatus.value = "Signed out - switching to anonymous mode"
+            _syncStatus.value = "Signed out successfully"
+
+            // Small delay then switch to anonymous mode
+            delay(1000)
 
             // Sign in anonymously as fallback
             ensureUserAuthenticated()
