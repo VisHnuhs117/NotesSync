@@ -99,6 +99,8 @@ fun NotesListScreen(
     val categories by viewModel.categories.collectAsState(initial = emptyList())
     val syncStatus by viewModel.syncStatus.collectAsState()
 
+    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -294,7 +296,7 @@ fun NotesListScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                if (viewModel.isAnonymousUser()) {
+                                if (!isAuthenticated || viewModel.isAnonymousUser()) {
                                     Text(
                                         text = "Anonymous User",
                                         style = MaterialTheme.typography.titleSmall
@@ -322,7 +324,7 @@ fun NotesListScreen(
                                 }
                             }
 
-                            if (viewModel.isAnonymousUser()) {
+                            if (!isAuthenticated || viewModel.isAnonymousUser()) {
                                 Button(
                                     onClick = onShowEmailAuth
                                 ) {
