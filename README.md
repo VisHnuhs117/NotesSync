@@ -34,5 +34,5 @@ Whether you’re jotting down ideas, making a to-do list, or organizing your tho
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/NoteSync-App.git
+git clone https://github.com/VisHnuhs117/NoteSync-App.git
 cd NoteSync-App
